@@ -32,6 +32,8 @@ function selectedCategoryType(){
 function renderCategorySettings(){const type=selectedCategoryType();$('categorySettingsList').innerHTML=CATEGORIES[type].map((name,i)=>`<div class="category-setting-row"><input aria-label="Nama kategori" data-category-name="${i}" value="${escapeHtml(name)}" maxlength="60"><button type="button" class="secondary smallbtn" data-category-save="${i}">Simpan</button><button type="button" class="dangerbtn smallbtn" data-category-delete="${i}">Hapus</button></div>`).join('')||'<div class="empty">Belum ada kategori. Tambahkan kategori baru di atas.</div>';}
 function formatThousands(v){const d=String(v||'').replace(/\D/g,'');return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';}
 function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/\D/g,''))||0;}
+function numericAmount(v){if(typeof v==='number')return Number.isFinite(v)?v:0;const s=String(v??'').trim();if(!s)return 0;const digits=s.replace(/[^0-9,.-]/g,'');if(!digits)return 0;const normalized=digits.includes(',')&&digits.includes('.')?digits.replace(/\./g,'').replace(',', '.'):digits.includes(',')?digits.replace(',', '.'):digits.replace(/\./g,'');const n=Number(normalized);return Number.isFinite(n)?n:0;}
+function transactionType(t){const s=String(t??'').trim().toLowerCase();return s==='pemasukan'||s==='masuk'?'Pemasukan':s==='pengeluaran'||s==='keluar'?'Pengeluaran':String(t??'').trim();}
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -49,6 +51,11 @@ function loadData() {
       $('transactionList').innerHTML = '<div class="empty">Data tidak dapat dibaca. Periksa URL dan izin deployment Apps Script.</div>'; return;
     }
     transactions = payload.data;
+    // Jika bulan berjalan kosong tetapi ada data lama, tampilkan bulan transaksi terbaru.
+    if (transactions.length && !transactions.some(t => normalizeDate(t.tanggal).slice(0,7) === currentMonth())) {
+      const latestMonth = transactions.map(t => normalizeDate(t.tanggal).slice(0,7)).filter(m => /^\d{4}-\d{2}$/.test(m)).sort().pop();
+      if (latestMonth) $('monthFilter').value = latestMonth;
+    }
     render();
   };
   const script = document.createElement('script');
@@ -60,15 +67,23 @@ function loadData() {
   };
   document.body.appendChild(script);
 }
+function normalizeDate(value) {
+  const s = String(value ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : localDateString(d);
+}
 function render() {
   const month = $('monthFilter').value || currentMonth();
   const type = $('typeFilter').value;
   const query = $('searchInput').value.trim().toLowerCase();
-  const monthRows = transactions.filter(t => String(t.tanggal).slice(0,7) === month);
-  const totalMasuk = transactions.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
-  const totalKeluar = transactions.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
-  const masuk = monthRows.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
-  const keluar = monthRows.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const monthRows = transactions.filter(t => normalizeDate(t.tanggal).slice(0,7) === month);
+  const totalMasuk = transactions.filter(t => transactionType(t.jenis) === 'Pemasukan').reduce((s,t)=>s+numericAmount(t.jumlah),0);
+  const totalKeluar = transactions.filter(t => transactionType(t.jenis) === 'Pengeluaran').reduce((s,t)=>s+numericAmount(t.jumlah),0);
+  const masuk = monthRows.filter(t => transactionType(t.jenis) === 'Pemasukan').reduce((s,t)=>s+numericAmount(t.jumlah),0);
+  const keluar = monthRows.filter(t => transactionType(t.jenis) === 'Pengeluaran').reduce((s,t)=>s+numericAmount(t.jumlah),0);
   $('saldo').textContent = rupiah(totalMasuk-totalKeluar);
   $('pemasukan').textContent = rupiah(masuk);
   $('pengeluaran').textContent = rupiah(keluar);
@@ -81,10 +96,10 @@ function render() {
     return;
   }
   $('transactionList').innerHTML = rows.map(t => {
-    const income = t.jenis === 'Pemasukan';
+    const income = transactionType(t.jenis) === 'Pemasukan';
     return `<article class="transaction">
       <div class="txicon ${income?'in':'out'}">${income?'↗':'↘'}</div>
-      <div class="txdetails"><strong>${escapeHtml(t.kategori)}</strong><small>${escapeHtml(t.tanggal)}${t.keterangan?' · '+escapeHtml(t.keterangan):''}</small></div>
+      <div class="txdetails"><strong>${escapeHtml(t.kategori)}</strong><small>${escapeHtml(normalizeDate(t.tanggal))}${t.keterangan?' · '+escapeHtml(t.keterangan):''}</small></div>
       <div class="txright"><div class="txamount ${income?'in':'out'}">${income?'+':'−'}${rupiah(t.jumlah)}</div><button class="deletebtn" data-delete="${escapeHtml(t.id)}">Hapus</button></div>
     </article>`;
   }).join('');
@@ -131,7 +146,7 @@ document.querySelectorAll('input[name="jenis"]').forEach(el => el.addEventListen
 $('refreshBtn').addEventListener('click', loadData);
 $('exportBtn').addEventListener('click', () => {
   const month = $('monthFilter').value || currentMonth();
-  const rows = transactions.filter(t => String(t.tanggal).slice(0,7) === month);
+  const rows = transactions.filter(t => normalizeDate(t.tanggal).slice(0,7) === month);
   if (!rows.length) { showToast('Tidak ada transaksi untuk diekspor.'); return; }
   const quote = v => `"${String(v??'').replace(/"/g,'""')}"`;
   const csv = '\ufeff' + [['Tanggal','Jenis','Kategori','Keterangan','Jumlah'], ...rows.map(t=>[t.tanggal,t.jenis,t.kategori,t.keterangan,t.jumlah])]
@@ -175,21 +190,21 @@ $('transactionForm').addEventListener('click', e => {
 });
 $('printBtn').addEventListener('click', () => {
   const month = $('monthFilter').value || currentMonth();
-  const rows = transactions.filter(t => String(t.tanggal).slice(0,7) === month &&
+  const rows = transactions.filter(t => normalizeDate(t.tanggal).slice(0,7) === month &&
     (!($('typeFilter').value) || t.jenis === $('typeFilter').value) &&
     `${t.kategori} ${t.keterangan} ${t.tanggal}`.toLowerCase().includes($('searchInput').value.trim().toLowerCase()));
-  const masuk = rows.filter(t=>t.jenis==='Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
-  const keluar = rows.filter(t=>t.jenis==='Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const masuk = rows.filter(t=>transactionType(t.jenis)==='Pemasukan').reduce((s,t)=>s+numericAmount(t.jumlah),0);
+  const keluar = rows.filter(t=>transactionType(t.jenis)==='Pengeluaran').reduce((s,t)=>s+numericAmount(t.jumlah),0);
   const w = window.open('', '_blank');
   if (!w) { showToast('Izinkan pop-up untuk mencetak laporan.'); return; }
   const safe = v => String(v ?? '').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   w.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Laporan Kas Pengajian ${safe(month)}</title>
-  <style>body{font-family:Arial,sans-serif;color:#222;padding:24px}h1,h2,p{text-align:center;margin:5px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border:1px solid #999;padding:8px;text-align:left;font-size:12px}th{background:#eaf3ed}.totals{display:flex;gap:28px;margin-top:20px;font-weight:bold}.date{text-align:right;font-size:12px;margin-top:18px}@media print{button{display:none}}</style></head><body>
+  <style>body{font-family:Arial,sans-serif;color:#222;padding:24px}h1,h2,p{text-align:center;margin:5px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border:1px solid #999;padding:8px;text-align:left;font-size:12px}th{background:#eaf3ed}.totals{display:flex;gap:28px;margin-top:20px;font-weight:bold;flex-wrap:wrap}.date{text-align:right;font-size:12px;margin-top:18px}.signature{display:flex;justify-content:flex-end;margin-top:55px;page-break-inside:avoid}.signature-box{width:240px;text-align:center;line-height:1.7}.signature-space{height:70px}.signature-name{border-bottom:1px solid #222;display:inline-block;min-width:190px;margin-top:4px}@media print{button{display:none}}</style></head><body>
   <h1>Majelis Yasinan “AL HIKMAH”</h1><h2>Laporan Kas Pengajian</h2><p>Periode ${safe(month)}</p>
   <div class="totals"><span>Total pemasukan: ${safe(rupiah(masuk))}</span><span>Total pengeluaran: ${safe(rupiah(keluar))}</span><span>Saldo periode: ${safe(rupiah(masuk-keluar))}</span></div>
   <table><thead><tr><th>No.</th><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Keterangan</th><th>Jumlah</th></tr></thead><tbody>
-  ${rows.map((t,i)=>`<tr><td>${i+1}</td><td>${safe(t.tanggal)}</td><td>${safe(t.jenis)}</td><td>${safe(t.kategori)}</td><td>${safe(t.keterangan)}</td><td>${safe(rupiah(t.jumlah))}</td></tr>`).join('')}
-  </tbody></table><p class="date">Dicetak: ${safe(new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short'}).format(new Date()))}</p>
+  ${rows.map((t,i)=>`<tr><td>${i+1}</td><td>${safe(normalizeDate(t.tanggal))}</td><td>${safe(transactionType(t.jenis))}</td><td>${safe(t.kategori)}</td><td>${safe(t.keterangan)}</td><td>${safe(rupiah(numericAmount(t.jumlah)))}</td></tr>`).join('')}
+  </tbody></table><p class="date">Dicetak: ${safe(new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short'}).format(new Date()))}</p><div class="signature"><div class="signature-box">Mengetahui,<br><strong>Bendahara</strong><div class="signature-space"></div><div class="signature-name">( ................................ )</div></div></div>
   <script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 });
