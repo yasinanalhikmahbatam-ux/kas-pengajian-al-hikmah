@@ -37,45 +37,86 @@ function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+```javascript
 function loadData(options = {}) {
   const requestId = ++loadRequestId;
+
   if (!apiReady()) {
-    $('transactionList').innerHTML = '<div class="empty">Backend belum diatur.<br>Tempel URL Web App Apps Script di file <b>app.js</b>, lalu unggah ulang aplikasi.</div>';
+    $('transactionList').innerHTML =
+      '<div class="empty">URL Google Sheets belum diatur.</div>';
     return;
   }
+
   if (!options.automatic || transactions.length === 0) {
-    $('transactionList').innerHTML = '<div class="empty">Memuat data dari Google Sheets…</div>';
+    $('transactionList').innerHTML =
+      '<div class="empty">Memuat data dari Google Sheets…</div>';
   }
-  const old = document.getElementById('apiJsonp'); if (old) old.remove();
+
+  const old = document.getElementById('apiJsonp');
+  if (old) old.remove();
+
   const callback = 'receiveSheetData';
-  window[callback] = payload => {
-    delete window[callback];
+
+  window[callback] = function(payload) {
     if (requestId !== loadRequestId) return;
-    autoLoadRetry = 0;
-    if (!payload || !payload.ok || !Array.isArray(payload.data)) {
-      $('transactionList').innerHTML = '<div class="empty">Data tidak dapat dibaca. Periksa URL dan izin deployment Apps Script.</div>'; return;
+
+    delete window[callback];
+
+    if (!payload || payload.ok !== true ||
+        !Array.isArray(payload.data)) {
+      $('transactionList').innerHTML =
+        '<div class="empty">Data API tidak valid. Periksa respons Google Sheets.</div>';
+      return;
     }
+
     transactions = payload.data;
-    // Jika bulan berjalan kosong tetapi ada data lama, tampilkan bulan transaksi terbaru.
-    if (transactions.length && !transactions.some(t => normalizeDate(t.tanggal).slice(0,7) === currentMonth())) {
-      const latestMonth = transactions.map(t => normalizeDate(t.tanggal).slice(0,7)).filter(m => /^\d{4}-\d{2}$/.test(m)).sort().pop();
-      if (latestMonth) $('monthFilter').value = latestMonth;
+
+    if (
+      transactions.length &&
+      !transactions.some(t =>
+        normalizeDate(t.tanggal).slice(0, 7) === currentMonth()
+      )
+    ) {
+      const months = transactions
+        .map(t => normalizeDate(t.tanggal).slice(0, 7))
+        .filter(m => /^\d{4}-\d{2}$/.test(m))
+        .sort();
+
+      if (months.length) {
+        $('monthFilter').value = months[months.length - 1];
+      }
     }
+
     render();
   };
+
   const script = document.createElement('script');
   script.id = 'apiJsonp';
-  script.src = API_URL + '?action=api&callback=' + callback + '&t=' + Date.now();
-  script.onerror = () => {
-    delete window[callback];
+  script.src =
+    API_URL +
+    '?action=api&callback=' + callback +
+    '&t=' + Date.now();
+
+  script.onerror = function() {
     if (requestId !== loadRequestId) return;
-    if (transactions.length === 0) {
-      $('transactionList').innerHTML = '<div class="empty">Gagal terhubung. Mencoba memuat ulang otomatis…</div>';
+
+    delete window[callback];
+
+    $('transactionList').innerHTML =
+      '<div class="empty">Gagal memuat data. Periksa koneksi internet dan deployment Apps Script.</div>';
+
+    if (autoLoadRetry < 3) {
+      autoLoadRetry++;
+      setTimeout(
+        () => loadData({ automatic: true }),
+        1800 * autoLoadRetry
+      );
     }
-    if (autoLoadRetry < 3) { autoLoadRetry++; setTimeout(() => loadData({ automatic: true }), 1800 * autoLoadRetry); }
   };
+
   document.body.appendChild(script);
 }
+```
 function normalizeDate(value) {
   const s = String(value ?? '').trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
