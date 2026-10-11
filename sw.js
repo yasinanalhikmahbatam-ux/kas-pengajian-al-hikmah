@@ -1,5 +1,5 @@
-
-const CACHE = 'kas-pengajian-v5';
+```javascript
+const CACHE = 'kas-pengajian-v6';
 
 const ASSETS = [
   './',
@@ -25,23 +25,27 @@ self.addEventListener('install', event => {
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(key => key.startsWith('kas-pengajian-') && key !== CACHE)
-          .map(key => caches.delete(key))
-      )
-    )
+    Promise.all([
+      caches.keys().then(keys =>
+        Promise.all(
+          keys
+            .filter(key =>
+              key.startsWith('kas-pengajian-') &&
+              key !== CACHE
+            )
+            .map(key => caches.delete(key))
+        )
+      ),
+      self.clients.claim()
+    ])
   );
-
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Permintaan API Google Apps Script tidak boleh ditangani cache aplikasi.
+  // Jangan tangani API eksternal atau permintaan selain GET.
   if (
     url.origin !== self.location.origin ||
     request.method !== 'GET'
@@ -49,7 +53,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // File utama selalu mencoba mengambil versi terbaru terlebih dahulu.
+  // File aplikasi utama selalu mencoba jaringan terlebih dahulu.
   const isAppFile =
     /\/(index\.html|app\.js|style\.css|sw\.js)$/.test(url.pathname) ||
     url.pathname.endsWith('/');
@@ -60,8 +64,13 @@ self.addEventListener('fetch', event => {
         .then(response => {
           if (response && response.ok) {
             const copy = response.clone();
-            caches.open(CACHE).then(cache => cache.put(request, copy));
+            caches.open(CACHE)
+              .then(cache => cache.put(request, copy))
+              .catch(error =>
+                console.warn('Gagal memperbarui cache:', error)
+              );
           }
+
           return response;
         })
         .catch(async () => {
@@ -71,17 +80,22 @@ self.addEventListener('fetch', event => {
           const home = await caches.match('./index.html');
           if (home) return home;
 
-          return new Response('Aplikasi sedang offline. Periksa koneksi internet.', {
-            status: 503,
-            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-          });
+          return new Response(
+            'Aplikasi offline. Periksa koneksi internet.',
+            {
+              status: 503,
+              headers: {
+                'Content-Type': 'text/plain; charset=utf-8'
+              }
+            }
+          );
         })
     );
 
     return;
   }
 
-  // Aset lainnya menggunakan cache terlebih dahulu.
+  // Aset lain: gunakan cache jika tersedia.
   event.respondWith(
     caches.match(request).then(cached => {
       if (cached) return cached;
@@ -89,10 +103,14 @@ self.addEventListener('fetch', event => {
       return fetch(request).then(response => {
         if (response && response.ok) {
           const copy = response.clone();
-          caches.open(CACHE).then(cache => cache.put(request, copy));
+          caches.open(CACHE)
+            .then(cache => cache.put(request, copy))
+            .catch(() => {});
         }
+
         return response;
       });
     })
   );
 });
+```
