@@ -17,11 +17,11 @@
 </header>
 <main>
   <section class="monthbar">
-    <label for="monthFilter">Ringkasan bulan</label>
-    <input id="monthFilter" type="month">
+    <div><label>Ringkasan kas</label><small id="todayDate" class="today-date"></small></div>
+    <div class="month-control"><label for="monthFilter">Laporan bulan</label><input id="monthFilter" type="month"></div>
   </section>
   <section class="summary">
-    <article class="balance"><span>Saldo bulan ini</span><strong id="saldo">Rp0</strong><small id="jumlahTransaksi">0 transaksi</small></article>
+    <article class="balance"><span>Saldo keseluruhan</span><strong id="saldo">Rp0</strong><small id="jumlahTransaksi">0 transaksi</small></article>
     <article class="sumcard income"><span>↗ Pemasukan</span><strong id="pemasukan">Rp0</strong></article>
     <article class="sumcard expense"><span>↘ Pengeluaran</span><strong id="pengeluaran">Rp0</strong></article>
   </section>
