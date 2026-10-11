@@ -3,8 +3,7 @@
 // app.js - Versi terbaru dan perbaikan API
 // ============================================
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbyJaQJus17QR3NEcshSfZbeQD8bdlAYGmN0ve0wN6vpormHesQLNouTwWsnn8qBnfpyVA/exec';
-
+const API_URL = 'https://script.google.com/macros/s/AKfycbxZwOHMoFxSI644jOZYhmvGiLYwHbXv7EnABBG1jazTOvV54ZMR39fPRHeOXTMBtZq_FA/exec';
 const DEFAULT_CATEGORIES = {
   Pemasukan: [
     'Iuran jamaah', 'Donasi', 'Infak',
