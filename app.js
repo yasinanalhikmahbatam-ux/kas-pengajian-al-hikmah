@@ -35,6 +35,7 @@ function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
 function loadData() {
   const list = $('transactionList');
 
@@ -43,6 +44,86 @@ function loadData() {
       '<div class="empty">URL Apps Script belum diatur.</div>';
     return;
   }
+
+  list.innerHTML =
+    '<div class="empty">Memuat data dari Google Sheets...</div>';
+
+  // Hapus permintaan sebelumnya.
+  const oldScript = document.getElementById('apiJsonp');
+  if (oldScript) oldScript.remove();
+
+  if (window.kasApiTimeout) {
+    clearTimeout(window.kasApiTimeout);
+  }
+
+  // Gunakan nama callback yang sudah terbukti berhasil.
+  const callback = 'receiveSheetData';
+  let selesai = false;
+
+  function bersihkan() {
+    selesai = true;
+    clearTimeout(window.kasApiTimeout);
+
+    const scriptLama = document.getElementById('apiJsonp');
+    if (scriptLama) scriptLama.remove();
+  }
+
+  window[callback] = function(payload) {
+    if (selesai) return;
+    bersihkan();
+
+    // Pastikan respons berisi daftar transaksi.
+    if (
+      !payload ||
+      payload.ok !== true ||
+      !Array.isArray(payload.data)
+    ) {
+      console.error('Respons API tidak valid:', payload);
+      list.innerHTML =
+        '<div class="empty">Respons API tidak valid. Periksa Console browser.</div>';
+      return;
+    }
+
+    transactions = payload.data;
+
+    console.log(
+      'Data berhasil diterima:',
+      transactions.length,
+      'transaksi'
+    );
+
+    // Tampilkan seluruh data sesuai filter bulan yang dipilih.
+    render();
+  };
+
+  const script = document.createElement('script');
+  script.id = 'apiJsonp';
+
+  script.onerror = function() {
+    if (selesai) return;
+    bersihkan();
+
+    list.innerHTML =
+      '<div class="empty">Gagal memuat data. Periksa koneksi dan deployment Apps Script.</div>';
+  };
+
+  script.src =
+    API_URL +
+    '?action=api&callback=receiveSheetData&t=' +
+    Date.now();
+
+  document.body.appendChild(script);
+
+  window.kasApiTimeout = setTimeout(function() {
+    if (selesai) return;
+    bersihkan();
+
+    list.innerHTML =
+      '<div class="empty">Waktu memuat data habis. Klik tombol Muat Ulang.</div>';
+
+    console.error('Permintaan API melewati batas waktu.');
+  }, 15000);
+}
 
   list.innerHTML =
     '<div class="empty">Menghubungkan ke Google Sheets...</div>';
