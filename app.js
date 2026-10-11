@@ -35,31 +35,85 @@ function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+```javascript
 function loadData() {
+  const list = $('transactionList');
+
   if (!apiReady()) {
-    $('transactionList').innerHTML = '<div class="empty">Backend belum diatur.<br>Tempel URL Web App Apps Script di file <b>app.js</b>, lalu unggah ulang aplikasi.</div>';
+    list.innerHTML =
+      '<div class="empty">URL Apps Script belum diatur.</div>';
     return;
   }
-  $('transactionList').innerHTML = '<div class="empty">Memuat data dari Google Sheets…</div>';
-  const old = document.getElementById('apiJsonp'); if (old) old.remove();
-  const callback = 'receiveSheetData';
-  window[callback] = payload => {
+
+  list.innerHTML =
+    '<div class="empty">Menghubungkan ke Google Sheets...</div>';
+
+  // Bersihkan permintaan lama.
+  const oldScript = document.getElementById('apiJsonp');
+  if (oldScript) oldScript.remove();
+
+  if (window.kasApiTimeout) {
+    clearTimeout(window.kasApiTimeout);
+  }
+
+  // Callback unik untuk permintaan ini.
+  const callback =
+    'receiveSheetData_' + Date.now();
+
+  let selesai = false;
+
+  function bersihkan() {
+    selesai = true;
+    clearTimeout(window.kasApiTimeout);
     delete window[callback];
-    if (!payload || !payload.ok || !Array.isArray(payload.data)) {
-      $('transactionList').innerHTML = '<div class="empty">Data tidak dapat dibaca. Periksa URL dan izin deployment Apps Script.</div>'; return;
+
+    const el = document.getElementById('apiJsonp');
+    if (el) el.remove();
+  }
+
+  window[callback] = function(payload) {
+    if (selesai) return;
+    bersihkan();
+
+    if (!payload || payload.ok !== true ||
+        !Array.isArray(payload.data)) {
+      list.innerHTML =
+        '<div class="empty">Respons API tidak sesuai. Periksa deployment Apps Script.</div>';
+      return;
     }
+
     transactions = payload.data;
     render();
   };
+
   const script = document.createElement('script');
   script.id = 'apiJsonp';
-  script.src = API_URL + '?action=api&callback=' + callback + '&t=' + Date.now();
-  script.onerror = () => {
-    delete window[callback];
-    $('transactionList').innerHTML = '<div class="empty">Gagal terhubung. Periksa koneksi internet dan URL Apps Script.</div>';
+
+  script.onerror = function() {
+    if (selesai) return;
+    bersihkan();
+
+    list.innerHTML =
+      '<div class="empty">Gagal menghubungi Google Sheets. Periksa koneksi internet, izin Web App, dan deployment Apps Script.</div>';
   };
+
+  script.src = API_URL +
+    '?action=api&callback=' +
+    encodeURIComponent(callback) +
+    '&t=' + Date.now();
+
   document.body.appendChild(script);
+
+  // Hindari aplikasi menunggu tanpa batas.
+  window.kasApiTimeout = setTimeout(function() {
+    if (selesai) return;
+    bersihkan();
+
+    list.innerHTML =
+      '<div class="empty">Permintaan data melewati batas waktu. Muat ulang aplikasi dan periksa koneksi ke Google Sheets.</div>';
+  }, 15000);
 }
+```
 function render() {
   const month = $('monthFilter').value || currentMonth();
   const type = $('typeFilter').value;
