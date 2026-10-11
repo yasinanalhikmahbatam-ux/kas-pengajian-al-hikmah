@@ -189,10 +189,10 @@ function loadData() {
     if (selesai) return;
     bersihkan();
 
-    list.innerHTML =
+    list.innerHTML ={
       '<div class="empty">Permintaan data melewati batas waktu. Muat ulang aplikasi dan periksa koneksi ke Google Sheets.</div>';
   }, 15000);
-
+}
 
 function render() {
   const month = $('monthFilter').value || currentMonth();
