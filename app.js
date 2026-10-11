@@ -1,4 +1,4 @@
-```javascript
+
 // ============================================
 // APLIKASI KAS PENGAJIAN AL HIKMAH
 // app.js - Versi perbaikan
@@ -968,4 +968,3 @@ if (
       ));
   });
 }
-```
