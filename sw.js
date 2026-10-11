@@ -1,9 +1,9 @@
 // ============================================
 // SERVICE WORKER - KAS PENGAJIAN AL HIKMAH
-// Versi cache: v9
+// Versi cache: v10
 // ============================================
 
-const CACHE = 'kas-pengajian-v9';
+const CACHE = 'kas-pengajian-v10';
 
 const ASSETS = [
   './',
