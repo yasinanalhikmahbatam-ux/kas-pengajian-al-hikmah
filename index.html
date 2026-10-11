@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#176b45">
+<meta name="description" content="Catatan pemasukan dan pengeluaran pengajian">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<title>Kas Pengajian</title>
+</head>
+<body>
+<header class="topbar">
+  <div class="brandmark">✦</div><div><h1>Kas Pengajian</h1><p>Catatan keuangan yang rapi</p></div>
+  <button id="installBtn" class="iconbtn hidden" aria-label="Pasang aplikasi">＋</button>
+</header>
+<main>
+  <section class="monthbar">
+    <label for="monthFilter">Ringkasan bulan</label>
+    <input id="monthFilter" type="month">
+  </section>
+  <section class="summary">
+    <article class="balance"><span>Saldo bulan ini</span><strong id="saldo">Rp0</strong><small id="jumlahTransaksi">0 transaksi</small></article>
+    <article class="sumcard income"><span>↗ Pemasukan</span><strong id="pemasukan">Rp0</strong></article>
+    <article class="sumcard expense"><span>↘ Pengeluaran</span><strong id="pengeluaran">Rp0</strong></article>
+  </section>
+  <section class="panel">
+    <div class="sectionhead"><div><h2>Tambah transaksi</h2><p>Catat uang masuk atau keluar</p></div></div>
+    <form id="transactionForm">
+      <div class="type-switch">
+        <label><input type="radio" name="jenis" value="Pemasukan" checked><span>＋ Pemasukan</span></label>
+        <label><input type="radio" name="jenis" value="Pengeluaran"><span>− Pengeluaran</span></label>
+      </div>
+      <div class="formgrid">
+        <label>Tanggal<input id="tanggal" name="tanggal" type="date" required></label>
+        <label>Jumlah (Rp)<input id="jumlah" name="jumlah" type="number" min="1" step="1" inputmode="numeric" placeholder="Contoh: 50000" required></label>
+        <label>Kategori<select id="kategori" name="kategori" required></select></label>
+        <label>Keterangan (opsional)<input id="keterangan" name="keterangan" maxlength="160" placeholder="Contoh: iuran jamaah"></label>
+      </div>
+      <button class="primary full" type="submit" id="saveBtn">Simpan transaksi</button>
+      <p id="formMessage" class="message" role="status"></p>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="sectionhead historyhead"><div><h2>Riwayat transaksi</h2><p id="historySubtitle">Transaksi bulan terpilih</p></div><button id="refreshBtn" class="secondary">↻ Muat ulang</button></div>
+    <div class="filters">
+      <input id="searchInput" type="search" placeholder="Cari kategori atau keterangan…">
+      <select id="typeFilter"><option value="">Semua jenis</option><option>Pemasukan</option><option>Pengeluaran</option></select>
+    </div>
+    <div id="transactionList" class="transaction-list"><div class="empty">Menghubungkan ke Google Sheets…</div></div>
+    <button id="exportBtn" class="secondary full">Ekspor CSV bulan ini</button>
+  </section>
+  <p class="footnote">Data tersimpan di Google Sheets. Koneksi internet diperlukan untuk sinkronisasi.</p>
+</main>
+<div id="toast" class="toast" role="status"></div>
+<iframe name="submitFrame" id="submitFrame" class="hiddenframe" title="pengiriman data"></iframe>
+<form id="postForm" method="post" target="submitFrame" class="hiddenframe">
+  <input name="action"><input name="tanggal"><input name="jenis"><input name="kategori"><input name="keterangan"><input name="jumlah"><input name="id">
+</form>
+<script src="app.js"></script>
+</body></html>
