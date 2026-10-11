@@ -349,4 +349,3 @@ document.addEventListener('DOMContentLoaded', function () {
   pasangEvent();
   muatData();
 });
-```
