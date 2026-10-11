@@ -1,351 +1,211 @@
+// Ganti dengan URL Web App Apps Script Anda yang berakhiran /exec.
+const API_URL = 'https://script.google.com/macros/s/AKfycbyJaQJus17QR3NEcshSfZbeQD8bdlAYGmN0ve0wN6vpormHesQLNouTwWsnn8qBnfpyVA/exec';
+const DEFAULT_CATEGORIES = {
+  Pemasukan: ['Iuran jamaah','Donasi','Infak','Sedekah','Sumbangan','Lainnya'],
+  Pengeluaran: ['Konsumsi','Transportasi','Perlengkapan','Kegiatan pengajian','Listrik/Air','Santunan','Lainnya']
+};
+function readCategories(){try{const v=JSON.parse(localStorage.getItem('kasPengajianCategories')||'null');if(v&&Array.isArray(v.Pemasukan)&&Array.isArray(v.Pengeluaran))return v;}catch(e){}return JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));}
+let CATEGORIES=readCategories();
+const $ = id => document.getElementById(id);
+let transactions = [];
+let installPrompt = null;
 
-'use strict';
-
-/* =========================================
-   KAS PENGAJIAN AL HIKMAH
-   app.js - versi pengganti
-   ========================================= */
-
-var API_URL = 'https://script.google.com/macros/s/AKfycbyJaQJus17QR3NEcshSfZbeQD8bdlAYGmN0ve0wN6vpormHesQLNouTwWsnn8qBnfpyVA/exec';
-
-var transaksi = [];
-var sedangMemuat = false;
-
-function cariElemen(daftarId) {
-  for (var i = 0; i < daftarId.length; i++) {
-    var elemen = document.getElementById(daftarId[i]);
-    if (elemen) return elemen;
-  }
-  return null;
+function localDateString(d = new Date()) {
+  const offset = d.getTimezoneOffset();
+  return new Date(d.getTime() - offset * 60000).toISOString().slice(0,10);
 }
-
-function ubahTeks(daftarId, teks) {
-  var elemen = cariElemen(daftarId);
-  if (elemen) elemen.textContent = teks;
+function currentMonth() { return localDateString().slice(0,7); }
+function rupiah(n) {
+  return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n)||0);
 }
-
-function rupiah(nilai) {
-  var angka = Number(nilai);
-  if (!Number.isFinite(angka)) angka = 0;
-
-  return 'Rp ' + angka.toLocaleString('id-ID');
+function apiReady() { return API_URL.startsWith('https://script.google.com/macros/s/') && API_URL.endsWith('/exec'); }
+function showToast(msg) {
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(showToast.timer); showToast.timer = setTimeout(() => el.classList.remove('show'), 2800);
 }
-
-function angkaUang(nilai) {
-  if (typeof nilai === 'number') return nilai;
-
-  var teks = String(nilai == null ? '' : nilai).trim();
-  teks = teks.replace(/rp/gi, '').replace(/\s/g, '');
-
-  if (teks.indexOf('.') !== -1 && teks.indexOf(',') !== -1) {
-    teks = teks.replace(/\./g, '').replace(',', '.');
-  } else if (teks.indexOf('.') !== -1) {
-    teks = teks.replace(/\./g, '');
-  } else if (teks.indexOf(',') !== -1) {
-    teks = teks.replace(',', '.');
-  }
-
-  var hasil = Number(teks);
-  return Number.isFinite(hasil) ? hasil : 0;
+function setCategories(){const type=document.querySelector('input[name="jenis"]:checked').value,old=$('kategori').value;$('kategori').innerHTML=CATEGORIES[type].map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');if(CATEGORIES[type].includes(old))$('kategori').value=old;}
+function saveCategories(){try{localStorage.setItem('kasPengajianCategories',JSON.stringify(CATEGORIES));}catch(e){}setCategories();renderCategorySettings();}
+function selectedCategoryType(){
+  const selected=document.querySelector('input[name="categoryJenis"]:checked');
+  return selected ? selected.value : 'Pemasukan';
 }
-
-function tanggalHariIni(tanggal) {
-  var tahun = tanggal.getFullYear();
-  var bulan = String(tanggal.getMonth() + 1);
-  var hari = String(tanggal.getDate());
-
-  if (bulan.length < 2) bulan = '0' + bulan;
-  if (hari.length < 2) hari = '0' + hari;
-
-  return tahun + '-' + bulan + '-' + hari;
+function renderCategorySettings(){const type=selectedCategoryType();$('categorySettingsList').innerHTML=CATEGORIES[type].map((name,i)=>`<div class="category-setting-row"><input aria-label="Nama kategori" data-category-name="${i}" value="${escapeHtml(name)}" maxlength="60"><button type="button" class="secondary smallbtn" data-category-save="${i}">Simpan</button><button type="button" class="dangerbtn smallbtn" data-category-delete="${i}">Hapus</button></div>`).join('')||'<div class="empty">Belum ada kategori. Tambahkan kategori baru di atas.</div>';}
+function formatThousands(v){const d=String(v||'').replace(/\D/g,'');return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';}
+function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/\D/g,''))||0;}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
-function normalisasiTanggal(nilai) {
-  if (nilai == null || nilai === '') return '';
-
-  if (nilai instanceof Date && !isNaN(nilai.getTime())) {
-    return tanggalHariIni(nilai);
-  }
-
-  var teks = String(nilai).trim();
-  if (!teks) return '';
-
-  var cocok = teks.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (cocok) {
-    return cocok[1] + '-' +
-      String(cocok[2]).padStart(2, '0') + '-' +
-      String(cocok[3]).padStart(2, '0');
-  }
-
-  cocok = teks.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-  if (cocok) {
-    return cocok[3] + '-' +
-      String(cocok[2]).padStart(2, '0') + '-' +
-      String(cocok[1]).padStart(2, '0');
-  }
-
-  var tanggal = new Date(teks);
-  if (!isNaN(tanggal.getTime())) return tanggalHariIni(tanggal);
-
-  return '';
-}
-
-function nilaiKolom(data, nama) {
-  var kunci = nama.toLowerCase();
-
-  for (var key in data) {
-    if (Object.prototype.hasOwnProperty.call(data, key)) {
-      if (key.toLowerCase() === kunci) return data[key];
-    }
-  }
-
-  return '';
-}
-
-function normalisasiTransaksi(data) {
-  return data.map(function (item, indeks) {
-    var tanggal = nilaiKolom(item, 'tanggal');
-    var jenis = String(nilaiKolom(item, 'jenis') || '').toLowerCase().trim();
-
-    if (jenis === 'masuk') jenis = 'pemasukan';
-    if (jenis === 'keluar') jenis = 'pengeluaran';
-
-    return {
-      id: nilaiKolom(item, 'id') || String(indeks + 1),
-      tanggal: normalisasiTanggal(tanggal),
-      jenis: jenis,
-      kategori: nilaiKolom(item, 'kategori') || '-',
-      keterangan: nilaiKolom(item, 'keterangan') || '-',
-      jumlah: angkaUang(nilaiKolom(item, 'jumlah'))
-    };
-  });
-}
-
-function bulanTerpilih() {
-  var elemen = cariElemen([
-    'filterBulan', 'bulanFilter', 'filter-bulan',
-    'bulan', 'monthFilter'
-  ]);
-
-  if (elemen && elemen.value) {
-    var nilai = elemen.value;
-
-    if (/^\d{4}-\d{2}$/.test(nilai)) return nilai;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(nilai)) {
-      return nilai.substring(0, 7);
-    }
-  }
-
-  var sekarang = new Date();
-  return sekarang.getFullYear() + '-' +
-    String(sekarang.getMonth() + 1).padStart(2, '0');
-}
-
-function transaksiBulanIni() {
-  var bulan = bulanTerpilih();
-
-  return transaksi.filter(function (item) {
-    return item.tanggal && item.tanggal.substring(0, 7) === bulan;
-  });
-}
-
-function hitungRingkasan() {
-  var data = transaksiBulanIni();
-  var pemasukan = 0;
-  var pengeluaran = 0;
-
-  data.forEach(function (item) {
-    if (item.jenis.indexOf('masuk') !== -1 ||
-        item.jenis.indexOf('pemasukan') !== -1) {
-      pemasukan += item.jumlah;
-    } else if (item.jenis.indexOf('keluar') !== -1 ||
-               item.jenis.indexOf('pengeluaran') !== -1) {
-      pengeluaran += item.jumlah;
-    }
-  });
-
-  ubahTeks([
-    'totalPemasukan', 'totalMasuk', 'pemasukan',
-    'total-pemasukan', 'income'
-  ], rupiah(pemasukan));
-
-  ubahTeks([
-    'totalPengeluaran', 'totalKeluar', 'pengeluaran',
-    'total-pengeluaran', 'expense'
-  ], rupiah(pengeluaran));
-
-  ubahTeks([
-    'saldo', 'totalSaldo', 'saldoKas',
-    'totalSaldoKas', 'total-saldo', 'balance'
-  ], rupiah(pemasukan - pengeluaran));
-
-  ubahTeks([
-    'jumlahTransaksi', 'totalTransaksi',
-    'jumlah-transaksi', 'transactionCount'
-  ], String(data.length));
-
-  tampilkanTabel(data);
-}
-
-function tampilkanTabel(data) {
-  var tabel = cariElemen([
-    'tabelTransaksi', 'daftarTransaksi',
-    'transaksiBody', 'tbodyTransaksi',
-    'dataTransaksi', 'transactionList'
-  ]);
-
-  if (!tabel) return;
-
-  tabel.innerHTML = '';
-
-  if (!data.length) {
-    var barisKosong = document.createElement('tr');
-    var kolomKosong = document.createElement('td');
-
-    kolomKosong.colSpan = 5;
-    kolomKosong.textContent = 'Belum ada transaksi pada bulan ini.';
-    barisKosong.appendChild(kolomKosong);
-    tabel.appendChild(barisKosong);
+function loadData() {
+  if (!apiReady()) {
+    $('transactionList').innerHTML = '<div class="empty">Backend belum diatur.<br>Tempel URL Web App Apps Script di file <b>app.js</b>, lalu unggah ulang aplikasi.</div>';
     return;
   }
-
-  data.slice().reverse().forEach(function (item) {
-    var baris = document.createElement('tr');
-
-    [
-      item.tanggal,
-      item.jenis,
-      item.kategori,
-      item.keterangan,
-      rupiah(item.jumlah)
-    ].forEach(function (nilai) {
-      var kolom = document.createElement('td');
-      kolom.textContent = nilai;
-      baris.appendChild(kolom);
-    });
-
-    tabel.appendChild(baris);
+  $('transactionList').innerHTML = '<div class="empty">Memuat data dari Google Sheets…</div>';
+  const old = document.getElementById('apiJsonp'); if (old) old.remove();
+  const callback = 'receiveSheetData';
+  window[callback] = payload => {
+    delete window[callback];
+    if (!payload || !payload.ok || !Array.isArray(payload.data)) {
+      $('transactionList').innerHTML = '<div class="empty">Data tidak dapat dibaca. Periksa URL dan izin deployment Apps Script.</div>'; return;
+    }
+    transactions = payload.data;
+    render();
+  };
+  const script = document.createElement('script');
+  script.id = 'apiJsonp';
+  script.src = API_URL + '?action=api&callback=' + callback + '&t=' + Date.now();
+  script.onerror = () => {
+    delete window[callback];
+    $('transactionList').innerHTML = '<div class="empty">Gagal terhubung. Periksa koneksi internet dan URL Apps Script.</div>';
+  };
+  document.body.appendChild(script);
+}
+function render() {
+  const month = $('monthFilter').value || currentMonth();
+  const type = $('typeFilter').value;
+  const query = $('searchInput').value.trim().toLowerCase();
+  const monthRows = transactions.filter(t => String(t.tanggal).slice(0,7) === month);
+  const totalMasuk = transactions.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const totalKeluar = transactions.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const masuk = monthRows.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const keluar = monthRows.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  $('saldo').textContent = rupiah(totalMasuk-totalKeluar);
+  $('pemasukan').textContent = rupiah(masuk);
+  $('pengeluaran').textContent = rupiah(keluar);
+  $('jumlahTransaksi').textContent = `${transactions.length} transaksi keseluruhan`;
+  $('historySubtitle').textContent = `Bulan ${month}`;
+  const rows = monthRows.filter(t => (!type || t.jenis === type) &&
+    `${t.kategori} ${t.keterangan} ${t.tanggal}`.toLowerCase().includes(query));
+  if (!rows.length) {
+    $('transactionList').innerHTML = `<div class="empty">${monthRows.length ? 'Tidak ada transaksi yang cocok dengan pencarian.' : 'Belum ada transaksi pada bulan ini.'}</div>`;
+    return;
+  }
+  $('transactionList').innerHTML = rows.map(t => {
+    const income = t.jenis === 'Pemasukan';
+    return `<article class="transaction">
+      <div class="txicon ${income?'in':'out'}">${income?'↗':'↘'}</div>
+      <div class="txdetails"><strong>${escapeHtml(t.kategori)}</strong><small>${escapeHtml(t.tanggal)}${t.keterangan?' · '+escapeHtml(t.keterangan):''}</small></div>
+      <div class="txright"><div class="txamount ${income?'in':'out'}">${income?'+':'−'}${rupiah(t.jumlah)}</div><button class="deletebtn" data-delete="${escapeHtml(t.id)}">Hapus</button></div>
+    </article>`;
+  }).join('');
+}
+function submitPost(data) {
+  const form = $('postForm');
+  form.action = API_URL;
+  Object.entries(data).forEach(([key,value]) => {
+    if (form.elements[key]) form.elements[key].value = value ?? '';
   });
+  form.submit();
 }
-
-function tampilkanStatus(pesan) {
-  ubahTeks([
-    'statusKoneksi', 'status', 'pesanStatus',
-    'statusAPI', 'connectionStatus'
-  ], pesan);
-}
-
-function muatData() {
-  if (sedangMemuat) return;
-  sedangMemuat = true;
-  tampilkanStatus('Menghubungkan ke Google Sheets...');
-
-  var pemisah = API_URL.indexOf('?') >= 0 ? '&' : '?';
-  var url = API_URL + pemisah +
-    'action=api&_=' + new Date().getTime();
-
-  var selesai = false;
-  var namaCallback = 'kasCallback' + Date.now();
-
-  function beres() {
-    sedangMemuat = false;
-  }
-
-  function berhasil(json) {
-    if (selesai) return;
-    selesai = true;
-
-    try {
-      if (json && json.ok === false) {
-        throw new Error(json.message || 'API melaporkan kegagalan.');
-      }
-
-      var daftar = Array.isArray(json) ? json :
-        (json && Array.isArray(json.data) ? json.data : null);
-
-      if (!daftar) {
-        throw new Error('Format data API tidak sesuai.');
-      }
-
-      transaksi = normalisasiTransaksi(daftar);
-      hitungRingkasan();
-      tampilkanStatus('Data berhasil dimuat: ' + transaksi.length + ' transaksi.');
-    } catch (error) {
-      tampilkanStatus('Gagal membaca data: ' + error.message);
-      console.error(error);
-    }
-
-    beres();
-  }
-
-  // JSONP untuk menghindari kendala CORS Google Apps Script.
-  window[namaCallback] = berhasil;
-
-  var script = document.createElement('script');
-  script.src = url + '&callback=' + namaCallback;
-  script.async = true;
-
-  script.onerror = function () {
-    if (selesai) return;
-    selesai = true;
-    tampilkanStatus('Koneksi gagal. Periksa URL dan izin deployment Apps Script.');
-    beres();
-    bersihkan();
+$('transactionForm').addEventListener('submit', e => {
+  e.preventDefault();
+  if (!apiReady()) { showToast('Atur URL Apps Script terlebih dahulu.'); return; }
+  const data = {
+    action:'add', tanggal:$('tanggal').value,
+    jenis:document.querySelector('input[name="jenis"]:checked').value,
+    kategori:$('kategori').value, keterangan:$('keterangan').value.trim(),
+    jumlah:String(amountNumber($('jumlah').value))
   };
-
-  function bersihkan() {
-    try {
-      delete window[namaCallback];
-    } catch (e) {
-      window[namaCallback] = undefined;
-    }
-
-    if (script.parentNode) script.parentNode.removeChild(script);
-  }
-
-  window[namaCallback] = function (hasil) {
-    berhasil(hasil);
-    bersihkan();
-  };
-
-  document.head.appendChild(script);
-
-  // Fallback JSONP jika API mengembalikan JSON biasa.
-  // Batas waktu untuk mencegah status loading terus-menerus.
-  window.setTimeout(function () {
-    if (!selesai) {
-      selesai = true;
-      tampilkanStatus('Belum ada respons API. Periksa deployment Apps Script.');
-      beres();
-      bersihkan();
-    }
-  }, 20000);
-}
-
-function pasangEvent() {
-  var tombolMuat = cariElemen([
-    'btnRefresh', 'refreshBtn', 'tombolMuatUlang',
-    'muatUlang', 'refresh'
-  ]);
-
-  if (tombolMuat) {
-    tombolMuat.addEventListener('click', function (event) {
-      event.preventDefault();
-      muatData();
-    });
-  }
-
-  var filter = cariElemen([
-    'filterBulan', 'bulanFilter', 'filter-bulan',
-    'bulan', 'monthFilter'
-  ]);
-
-  if (filter) {
-    filter.addEventListener('change', hitungRingkasan);
-  }
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-  pasangEvent();
-  muatData();
+  if (!data.tanggal || Number(data.jumlah)<=0) { showToast('Periksa tanggal dan jumlah transaksi.'); return; }
+  const btn = $('saveBtn'); btn.disabled = true; btn.textContent = 'Menyimpan…';
+  submitPost(data);
+  setTimeout(() => {
+    btn.disabled = false; btn.textContent = 'Simpan transaksi';
+    $('jumlah').value = ''; $('keterangan').value = '';
+    showToast('Permintaan dikirim. Memperbarui data…');
+    setTimeout(loadData, 1600);
+  }, 700);
 });
+$('transactionList').addEventListener('click', e => {
+  const btn = e.target.closest('[data-delete]');
+  if (!btn) return;
+  const item = transactions.find(t => t.id === btn.dataset.delete);
+  if (!item || !confirm(`Hapus transaksi ${item.kategori} sebesar ${rupiah(item.jumlah)}?`)) return;
+  if (!apiReady()) return;
+  btn.disabled = true; submitPost({action:'delete',id:item.id});
+  showToast('Permintaan hapus dikirim…');
+  setTimeout(loadData, 1300);
+});
+document.querySelectorAll('input[name="jenis"]').forEach(el => el.addEventListener('change', setCategories));
+['monthFilter','typeFilter','searchInput'].forEach(id => $(id).addEventListener(id==='searchInput'?'input':'change', render));
+$('refreshBtn').addEventListener('click', loadData);
+$('exportBtn').addEventListener('click', () => {
+  const month = $('monthFilter').value || currentMonth();
+  const rows = transactions.filter(t => String(t.tanggal).slice(0,7) === month);
+  if (!rows.length) { showToast('Tidak ada transaksi untuk diekspor.'); return; }
+  const quote = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  const csv = '\ufeff' + [['Tanggal','Jenis','Kategori','Keterangan','Jumlah'], ...rows.map(t=>[t.tanggal,t.jenis,t.kategori,t.keterangan,t.jumlah])]
+    .map(r=>r.map(quote).join(';')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  const a = document.createElement('a'); a.href=url; a.download=`kas-pengajian-${month}.csv`; a.click(); URL.revokeObjectURL(url);
+});
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); installPrompt=e; $('installBtn').classList.remove('hidden');
+});
+$('installBtn').addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; $('installBtn').classList.add('hidden');
+});
+function openCategorySettings(e){
+  if(e){e.preventDefault();e.stopPropagation();}
+  $('categoryModal').classList.remove('hidden');
+  $('categoryModal').setAttribute('aria-hidden','false');
+  renderCategorySettings();
+}
+
+// Penanganan klik kategori melalui delegasi sebagai fallback.
+document.addEventListener('click', function(event) {
+  const trigger = event.target && event.target.closest ? event.target.closest('#manageCategoriesBtn') : null;
+  if (!trigger) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const modal = document.getElementById('categoryModal');
+  if (!modal) {
+    showToast('Panel pengaturan kategori tidak ditemukan. Unggah ulang index.html dan app.js.');
+    return;
+  }
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  if (typeof renderCategorySettings === 'function') renderCategorySettings();
+}, true);
+
+$('manageCategoriesBtn').addEventListener('click', openCategorySettings);
+$('transactionForm').addEventListener('click', e => {
+  if (e.target.closest('#manageCategoriesBtn')) openCategorySettings(e);
+});
+$('printBtn').addEventListener('click', () => {
+  const month = $('monthFilter').value || currentMonth();
+  const rows = transactions.filter(t => String(t.tanggal).slice(0,7) === month &&
+    (!($('typeFilter').value) || t.jenis === $('typeFilter').value) &&
+    `${t.kategori} ${t.keterangan} ${t.tanggal}`.toLowerCase().includes($('searchInput').value.trim().toLowerCase()));
+  const masuk = rows.filter(t=>t.jenis==='Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const keluar = rows.filter(t=>t.jenis==='Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Izinkan pop-up untuk mencetak laporan.'); return; }
+  const safe = v => String(v ?? '').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  w.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Laporan Kas Pengajian ${safe(month)}</title>
+  <style>body{font-family:Arial,sans-serif;color:#222;padding:24px}h1,h2,p{text-align:center;margin:5px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border:1px solid #999;padding:8px;text-align:left;font-size:12px}th{background:#eaf3ed}.totals{display:flex;gap:28px;margin-top:20px;font-weight:bold}.date{text-align:right;font-size:12px;margin-top:18px}@media print{button{display:none}}</style></head><body>
+  <h1>Majelis Yasinan “AL HIKMAH”</h1><h2>Laporan Kas Pengajian</h2><p>Periode ${safe(month)}</p>
+  <div class="totals"><span>Total pemasukan: ${safe(rupiah(masuk))}</span><span>Total pengeluaran: ${safe(rupiah(keluar))}</span><span>Saldo periode: ${safe(rupiah(masuk-keluar))}</span></div>
+  <table><thead><tr><th>No.</th><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Keterangan</th><th>Jumlah</th></tr></thead><tbody>
+  ${rows.map((t,i)=>`<tr><td>${i+1}</td><td>${safe(t.tanggal)}</td><td>${safe(t.jenis)}</td><td>${safe(t.kategori)}</td><td>${safe(t.keterangan)}</td><td>${safe(rupiah(t.jumlah))}</td></tr>`).join('')}
+  </tbody></table><p class="date">Dicetak: ${safe(new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short'}).format(new Date()))}</p>
+  <script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+});
+$('closeCategoryModal').addEventListener('click',()=>{$('categoryModal').classList.add('hidden');$('categoryModal').setAttribute('aria-hidden','true');});
+$('categoryModal').addEventListener('click',e=>{if(e.target===$('categoryModal')){$('categoryModal').classList.add('hidden');$('categoryModal').setAttribute('aria-hidden','true');}});
+document.querySelectorAll('input[name="categoryJenis"]').forEach(el=>el.addEventListener('change',renderCategorySettings));
+$('addCategoryForm').addEventListener('submit',e=>{e.preventDefault();const type=selectedCategoryType(),name=$('newCategory').value.trim();if(!name)return;if(CATEGORIES[type].some(c=>c.toLowerCase()===name.toLowerCase())){showToast('Kategori tersebut sudah ada.');return;}CATEGORIES[type].push(name);saveCategories();$('newCategory').value='';showToast('Kategori berhasil ditambahkan.');});
+$('categorySettingsList').addEventListener('click',e=>{const s=e.target.closest('[data-category-save]'),d=e.target.closest('[data-category-delete]'),type=selectedCategoryType();if(s){const i=Number(s.dataset.categorySave),input=$('categorySettingsList').querySelector(`[data-category-name="${i}"]`),name=input.value.trim();if(!name){showToast('Nama kategori tidak boleh kosong.');return;}if(CATEGORIES[type].some((c,j)=>j!==i&&c.toLowerCase()===name.toLowerCase())){showToast('Nama kategori sudah digunakan.');return;}CATEGORIES[type][i]=name;saveCategories();showToast('Kategori berhasil diubah.');}if(d){const i=Number(d.dataset.categoryDelete),name=CATEGORIES[type][i];if(!confirm(`Hapus kategori "${name}" dari daftar? Transaksi lama tidak dihapus.`))return;CATEGORIES[type].splice(i,1);saveCategories();showToast('Kategori berhasil dihapus.');}});
+$('jumlah').addEventListener('input',()=>{const pos=$('jumlah').selectionStart;$('jumlah').value=formatThousands($('jumlah').value);try{$('jumlah').setSelectionRange(pos,pos);}catch(e){}});
+$('tanggal').value = localDateString();
+$('todayDate').textContent = new Intl.DateTimeFormat('id-ID', {
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+}).format(new Date());
+$('monthFilter').value = currentMonth();
+setCategories();
+loadData();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
