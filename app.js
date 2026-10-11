@@ -94,8 +94,9 @@ function render() {
   const masuk = monthRows.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
   const keluar = monthRows.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
   $('saldo').textContent = rupiah(totalMasuk-totalKeluar);
-  $('pemasukan').textContent = rupiah(masuk);
-  $('pengeluaran').textContent = rupiah(keluar);
+  // Kartu ringkasan selalu menampilkan total keseluruhan, bukan hanya bulan yang dipilih.
+  $('pemasukan').textContent = rupiah(totalMasuk);
+  $('pengeluaran').textContent = rupiah(totalKeluar);
   $('jumlahTransaksi').textContent = `${transactions.length} transaksi keseluruhan`;
   $('historySubtitle').textContent = `Bulan ${month}`;
   const rows = monthRows.filter(t => (!type || t.jenis === type) &&
