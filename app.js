@@ -1,5 +1,5 @@
 // Ganti dengan URL Web App Apps Script Anda yang berakhiran /exec.
-const API_URL = https://script.google.com/macros/s/AKfycbyJaQJus17QR3NEcshSfZbeQD8bdlAYGmN0ve0wN6vpormHesQLNouTwWsnn8qBnfpyVA/exec;
+const API_URL = 'PASTE_URL_WEB_APP_APPS_SCRIPT_DI_SINI';
 const DEFAULT_CATEGORIES = {
   Pemasukan: ['Iuran jamaah','Donasi','Infak','Sedekah','Sumbangan','Lainnya'],
   Pengeluaran: ['Konsumsi','Transportasi','Perlengkapan','Kegiatan pengajian','Listrik/Air','Santunan','Lainnya']
@@ -24,7 +24,7 @@ function showToast(msg) {
   clearTimeout(showToast.timer); showToast.timer = setTimeout(() => el.classList.remove('show'), 2800);
 }
 function setCategories(){const type=document.querySelector('input[name="jenis"]:checked').value,old=$('kategori').value;$('kategori').innerHTML=CATEGORIES[type].map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');if(CATEGORIES[type].includes(old))$('kategori').value=old;}
-function saveCategories(){localStorage.setItem('kasPengajianCategories',JSON.stringify(CATEGORIES));setCategories();renderCategorySettings();}
+function saveCategories(){try{localStorage.setItem('kasPengajianCategories',JSON.stringify(CATEGORIES));}catch(e){}setCategories();renderCategorySettings();}
 function selectedCategoryType(){return document.querySelector('input[name="categoryJenis"]:checked').value;}
 function renderCategorySettings(){const type=selectedCategoryType();$('categorySettingsList').innerHTML=CATEGORIES[type].map((name,i)=>`<div class="category-setting-row"><input aria-label="Nama kategori" data-category-name="${i}" value="${escapeHtml(name)}" maxlength="60"><button type="button" class="secondary smallbtn" data-category-save="${i}">Simpan</button><button type="button" class="dangerbtn smallbtn" data-category-delete="${i}">Hapus</button></div>`).join('')||'<div class="empty">Belum ada kategori. Tambahkan kategori baru di atas.</div>';}
 function formatThousands(v){const d=String(v||'').replace(/\D/g,'');return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';}
@@ -143,9 +143,38 @@ $('installBtn').addEventListener('click', async () => {
   if (!installPrompt) return;
   installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; $('installBtn').classList.add('hidden');
 });
-$('manageCategoriesBtn').addEventListener('click',()=>{$('categoryModal').classList.remove('hidden');renderCategorySettings();});
-$('closeCategoryModal').addEventListener('click',()=>$('categoryModal').classList.add('hidden'));
-$('categoryModal').addEventListener('click',e=>{if(e.target===$('categoryModal'))$('categoryModal').classList.add('hidden');});
+function openCategorySettings(e){
+  if(e){e.preventDefault();e.stopPropagation();}
+  $('categoryModal').classList.remove('hidden');
+  $('categoryModal').setAttribute('aria-hidden','false');
+  renderCategorySettings();
+}
+$('manageCategoriesBtn').addEventListener('click', openCategorySettings);
+$('transactionForm').addEventListener('click', e => {
+  if (e.target.closest('#manageCategoriesBtn')) openCategorySettings(e);
+});
+$('printBtn').addEventListener('click', () => {
+  const month = $('monthFilter').value || currentMonth();
+  const rows = transactions.filter(t => String(t.tanggal).slice(0,7) === month &&
+    (!($('typeFilter').value) || t.jenis === $('typeFilter').value) &&
+    `${t.kategori} ${t.keterangan} ${t.tanggal}`.toLowerCase().includes($('searchInput').value.trim().toLowerCase()));
+  const masuk = rows.filter(t=>t.jenis==='Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const keluar = rows.filter(t=>t.jenis==='Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Izinkan pop-up untuk mencetak laporan.'); return; }
+  const safe = v => String(v ?? '').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  w.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Laporan Kas Pengajian ${safe(month)}</title>
+  <style>body{font-family:Arial,sans-serif;color:#222;padding:24px}h1,h2,p{text-align:center;margin:5px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border:1px solid #999;padding:8px;text-align:left;font-size:12px}th{background:#eaf3ed}.totals{display:flex;gap:28px;margin-top:20px;font-weight:bold}.date{text-align:right;font-size:12px;margin-top:18px}@media print{button{display:none}}</style></head><body>
+  <h1>Majelis Yasinan “AL HIKMAH”</h1><h2>Laporan Kas Pengajian</h2><p>Periode ${safe(month)}</p>
+  <div class="totals"><span>Total pemasukan: ${safe(rupiah(masuk))}</span><span>Total pengeluaran: ${safe(rupiah(keluar))}</span><span>Saldo periode: ${safe(rupiah(masuk-keluar))}</span></div>
+  <table><thead><tr><th>No.</th><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Keterangan</th><th>Jumlah</th></tr></thead><tbody>
+  ${rows.map((t,i)=>`<tr><td>${i+1}</td><td>${safe(t.tanggal)}</td><td>${safe(t.jenis)}</td><td>${safe(t.kategori)}</td><td>${safe(t.keterangan)}</td><td>${safe(rupiah(t.jumlah))}</td></tr>`).join('')}
+  </tbody></table><p class="date">Dicetak: ${safe(new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short'}).format(new Date()))}</p>
+  <script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+});
+$('closeCategoryModal').addEventListener('click',()=>{$('categoryModal').classList.add('hidden');$('categoryModal').setAttribute('aria-hidden','true');});
+$('categoryModal').addEventListener('click',e=>{if(e.target===$('categoryModal')){$('categoryModal').classList.add('hidden');$('categoryModal').setAttribute('aria-hidden','true');}});
 document.querySelectorAll('input[name="categoryJenis"]').forEach(el=>el.addEventListener('change',renderCategorySettings));
 $('addCategoryForm').addEventListener('submit',e=>{e.preventDefault();const type=selectedCategoryType(),name=$('newCategory').value.trim();if(!name)return;if(CATEGORIES[type].some(c=>c.toLowerCase()===name.toLowerCase())){showToast('Kategori tersebut sudah ada.');return;}CATEGORIES[type].push(name);saveCategories();$('newCategory').value='';showToast('Kategori berhasil ditambahkan.');});
 $('categorySettingsList').addEventListener('click',e=>{const s=e.target.closest('[data-category-save]'),d=e.target.closest('[data-category-delete]'),type=selectedCategoryType();if(s){const i=Number(s.dataset.categorySave),input=$('categorySettingsList').querySelector(`[data-category-name="${i}"]`),name=input.value.trim();if(!name){showToast('Nama kategori tidak boleh kosong.');return;}if(CATEGORIES[type].some((c,j)=>j!==i&&c.toLowerCase()===name.toLowerCase())){showToast('Nama kategori sudah digunakan.');return;}CATEGORIES[type][i]=name;saveCategories();showToast('Kategori berhasil diubah.');}if(d){const i=Number(d.dataset.categoryDelete),name=CATEGORIES[type][i];if(!confirm(`Hapus kategori "${name}" dari daftar? Transaksi lama tidak dihapus.`))return;CATEGORIES[type].splice(i,1);saveCategories();showToast('Kategori berhasil dihapus.');}});

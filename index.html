@@ -6,13 +6,14 @@
 <meta name="theme-color" content="#176b45">
 <meta name="description" content="Catatan pemasukan dan pengeluaran pengajian">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="logo-al-hikmah.png" type="image/png">
 <link rel="stylesheet" href="style.css">
-<title>Kas Pengajian</title>
+<title>Majelis Yasinan Al Hikmah — Kas Pengajian</title>
 </head>
 <body>
 <header class="topbar">
-  <div class="brandmark">✦</div><div><h1>Kas Pengajian</h1><p>Catatan keuangan yang rapi</p></div>
+  <img class="brand-logo" src="logo-al-hikmah.png" alt="Logo Majelis Yasinan Al Hikmah">
+  <div class="brand-copy"><h1>Majelis Yasinan <span>“AL HIKMAH”</span></h1><p>Kas Pengajian · Catatan Keuangan</p></div>
   <button id="installBtn" class="iconbtn hidden" aria-label="Pasang aplikasi">＋</button>
 </header>
 <main>
@@ -35,7 +36,7 @@
       <div class="formgrid">
         <label>Tanggal<input id="tanggal" name="tanggal" type="date" required></label>
         <label>Jumlah (Rp)<input id="jumlah" name="jumlah" type="text" inputmode="numeric" placeholder="Contoh: 5.000" autocomplete="off" required></label>
-        <div class="category-field"><label for="kategori">Kategori</label><select id="kategori" name="kategori" required></select><button type="button" id="manageCategoriesBtn" class="textbtn">⚙ Atur kategori</button></div>
+        <div class="category-field"><label for="kategori">Kategori</label><select id="kategori" name="kategori" required></select><button type="button" id="manageCategoriesBtn" class="textbtn" aria-haspopup="dialog" aria-controls="categoryModal">⚙ Atur kategori</button></div>
         <label>Keterangan (opsional)<input id="keterangan" name="keterangan" maxlength="160" placeholder="Contoh: iuran jamaah"></label>
       </div>
       <button class="primary full" type="submit" id="saveBtn">Simpan transaksi</button>
@@ -43,7 +44,7 @@
     </form>
   </section>
   <section class="panel">
-    <div class="sectionhead historyhead"><div><h2>Riwayat transaksi</h2><p id="historySubtitle">Transaksi bulan terpilih</p></div><button id="refreshBtn" class="secondary">↻ Muat ulang</button></div>
+    <div class="sectionhead historyhead"><div><h2>Riwayat transaksi</h2><p id="historySubtitle">Transaksi bulan terpilih</p></div><div class="history-actions"><button id="printBtn" type="button" class="secondary">⎙ Cetak</button><button id="refreshBtn" class="secondary">↻ Muat ulang</button></div></div>
     <div class="report-month"><label for="monthFilter">Laporan bulan</label><input id="monthFilter" type="month"></div>
     <div class="filters">
       <input id="searchInput" type="search" placeholder="Cari kategori atau keterangan…">

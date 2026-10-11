@@ -1,5 +1,5 @@
-const CACHE = 'kas-pengajian-v1';
-const ASSETS = ['./','./index.html','./style.css','./app.js','./manifest.json','./icon.svg'];
+const CACHE = 'kas-pengajian-v2';
+const ASSETS = ['./','./index.html','./style.css','./app.js','./manifest.json','./icon.svg','./logo-al-hikmah.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
   self.skipWaiting();

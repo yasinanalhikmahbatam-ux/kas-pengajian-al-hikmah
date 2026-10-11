@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Kas Pengajian",
-  "short_name": "Kas Pengajian",
-  "description": "Pencatatan pemasukan dan pengeluaran pengajian",
+  "name": "Majelis Yasinan Al Hikmah — Kas Pengajian",
+  "short_name": "Kas Al Hikmah",
+  "description": "Kas Pengajian Majelis Yasinan Al Hikmah — Catatan Keuangan",
   "lang": "id-ID",
   "start_url": "./",
   "scope": "./",
@@ -11,6 +11,11 @@
   "background_color": "#f5f8f6",
   "theme_color": "#176b45",
   "icons": [
-    {"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}
+    {
+      "src": "logo-al-hikmah.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
   ]
 }
