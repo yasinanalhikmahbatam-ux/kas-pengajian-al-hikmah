@@ -1,4 +1,4 @@
-```javascript
+
 const CACHE = 'kas-pengajian-v7';
 
 const ASSETS = [
@@ -99,4 +99,3 @@ self.addEventListener('fetch', event => {
     return fetch(request);
   })());
 });
-```
