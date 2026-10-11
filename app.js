@@ -30,6 +30,13 @@ function localDateString(date = new Date()) {
   return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
 function currentMonth() { return localDateString().slice(0, 7); }
+
+function formatTanggal(tanggal) {
+  const bagian = String(tanggal || '').slice(0, 10).split('-');
+  if (bagian.length !== 3 || bagian[0].length !== 4) return tanggal || '';
+  return `${bagian[2]}-${bagian[1]}-${bagian[0]}`;
+}
+
 function rupiah(value) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) || 0);
 }
@@ -176,7 +183,9 @@ function render() {
     const income = item.jenis === 'Pemasukan';
     return `<article class="transaction">
       <div class="txicon ${income ? 'in' : 'out'}">${income ? '↗' : '↘'}</div>
-      <div class="txdetails"><strong>${escapeHtml(item.kategori)}</strong><small>${escapeHtml(item.tanggal)}${item.keterangan ? ' · ' + escapeHtml(item.keterangan) : ''}</small></div>
+      
+<div class="txdetails"><strong>${escapeHtml(item.kategori)}</strong><small>${escapeHtml(formatTanggal(item.tanggal))}${item.keterangan ? ' · ' + escapeHtml(item.keterangan) : ''}</small></div>
+
       <div class="txright"><div class="txamount ${income ? 'in' : 'out'}">${income ? '+' : '−'}${rupiah(item.jumlah)}</div>
         <div class="txactions">
           <button type="button" class="secondary smallbtn" data-edit="${escapeHtml(item.id)}">Edit</button>
