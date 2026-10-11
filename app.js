@@ -25,7 +25,10 @@ function showToast(msg) {
 }
 function setCategories(){const type=document.querySelector('input[name="jenis"]:checked').value,old=$('kategori').value;$('kategori').innerHTML=CATEGORIES[type].map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');if(CATEGORIES[type].includes(old))$('kategori').value=old;}
 function saveCategories(){try{localStorage.setItem('kasPengajianCategories',JSON.stringify(CATEGORIES));}catch(e){}setCategories();renderCategorySettings();}
-function selectedCategoryType(){return document.querySelector('input[name="categoryJenis"]:checked').value;}
+function selectedCategoryType(){
+  const selected=document.querySelector('input[name="categoryJenis"]:checked');
+  return selected ? selected.value : 'Pemasukan';
+}
 function renderCategorySettings(){const type=selectedCategoryType();$('categorySettingsList').innerHTML=CATEGORIES[type].map((name,i)=>`<div class="category-setting-row"><input aria-label="Nama kategori" data-category-name="${i}" value="${escapeHtml(name)}" maxlength="60"><button type="button" class="secondary smallbtn" data-category-save="${i}">Simpan</button><button type="button" class="dangerbtn smallbtn" data-category-delete="${i}">Hapus</button></div>`).join('')||'<div class="empty">Belum ada kategori. Tambahkan kategori baru di atas.</div>';}
 function formatThousands(v){const d=String(v||'').replace(/\D/g,'');return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';}
 function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/\D/g,''))||0;}
@@ -149,6 +152,23 @@ function openCategorySettings(e){
   $('categoryModal').setAttribute('aria-hidden','false');
   renderCategorySettings();
 }
+
+// Penanganan klik kategori melalui delegasi sebagai fallback.
+document.addEventListener('click', function(event) {
+  const trigger = event.target && event.target.closest ? event.target.closest('#manageCategoriesBtn') : null;
+  if (!trigger) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const modal = document.getElementById('categoryModal');
+  if (!modal) {
+    showToast('Panel pengaturan kategori tidak ditemukan. Unggah ulang index.html dan app.js.');
+    return;
+  }
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  if (typeof renderCategorySettings === 'function') renderCategorySettings();
+}, true);
+
 $('manageCategoriesBtn').addEventListener('click', openCategorySettings);
 $('transactionForm').addEventListener('click', e => {
   if (e.target.closest('#manageCategoriesBtn')) openCategorySettings(e);
