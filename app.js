@@ -60,12 +60,14 @@ function render() {
   const type = $('typeFilter').value;
   const query = $('searchInput').value.trim().toLowerCase();
   const monthRows = transactions.filter(t => String(t.tanggal).slice(0,7) === month);
+  const totalMasuk = transactions.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
+  const totalKeluar = transactions.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
   const masuk = monthRows.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
   const keluar = monthRows.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
-  $('saldo').textContent = rupiah(masuk-keluar);
+  $('saldo').textContent = rupiah(totalMasuk-totalKeluar);
   $('pemasukan').textContent = rupiah(masuk);
   $('pengeluaran').textContent = rupiah(keluar);
-  $('jumlahTransaksi').textContent = `${monthRows.length} transaksi`;
+  $('jumlahTransaksi').textContent = `${transactions.length} transaksi keseluruhan`;
   $('historySubtitle').textContent = `Bulan ${month}`;
   const rows = monthRows.filter(t => (!type || t.jenis === type) &&
     `${t.kategori} ${t.keterangan} ${t.tanggal}`.toLowerCase().includes(query));
@@ -140,6 +142,9 @@ $('installBtn').addEventListener('click', async () => {
   installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; $('installBtn').classList.add('hidden');
 });
 $('tanggal').value = localDateString();
+$('todayDate').textContent = new Intl.DateTimeFormat('id-ID', {
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+}).format(new Date());
 $('monthFilter').value = currentMonth();
 setCategories();
 loadData();
