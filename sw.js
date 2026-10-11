@@ -1,5 +1,5 @@
 ```javascript
-const CACHE = 'kas-pengajian-v6';
+const CACHE = 'kas-pengajian-v7';
 
 const ASSETS = [
   './',
@@ -12,105 +12,91 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE)
-      .then(cache => cache.addAll(ASSETS))
-      .catch(error => {
-        console.error('Gagal menyimpan cache aplikasi:', error);
-      })
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
 
-  self.skipWaiting();
+    // Cache file secara terpisah supaya satu aset yang hilang
+    // tidak menggagalkan penyimpanan seluruh aplikasi.
+    await Promise.all(
+      ASSETS.map(async asset => {
+        try {
+          await cache.add(asset);
+        } catch (error) {
+          console.warn('Aset belum berhasil dicache:', asset);
+        }
+      })
+    );
+
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    Promise.all([
-      caches.keys().then(keys =>
-        Promise.all(
-          keys
-            .filter(key =>
-              key.startsWith('kas-pengajian-') &&
-              key !== CACHE
-            )
-            .map(key => caches.delete(key))
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+
+    await Promise.all(
+      keys
+        .filter(key =>
+          key.startsWith('kas-pengajian-') && key !== CACHE
         )
-      ),
-      self.clients.claim()
-    ])
-  );
+        .map(key => caches.delete(key))
+    );
+
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Jangan tangani API eksternal atau permintaan selain GET.
-  if (
-    url.origin !== self.location.origin ||
-    request.method !== 'GET'
-  ) {
+  if (request.method !== 'GET' ||
+      url.origin !== self.location.origin) {
     return;
   }
 
-  // File aplikasi utama selalu mencoba jaringan terlebih dahulu.
-  const isAppFile =
+  const appFile =
     /\/(index\.html|app\.js|style\.css|sw\.js)$/.test(url.pathname) ||
     url.pathname.endsWith('/');
 
-  if (isAppFile) {
-    event.respondWith(
-      fetch(request, { cache: 'no-cache' })
-        .then(response => {
-          if (response && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE)
-              .then(cache => cache.put(request, copy))
-              .catch(error =>
-                console.warn('Gagal memperbarui cache:', error)
-              );
-          }
+  if (appFile) {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request, {
+          cache: 'no-store'
+        });
 
-          return response;
-        })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          if (cached) return cached;
+        if (response.ok) {
+          const cache = await caches.open(CACHE);
+          await cache.put(request, response.clone());
+        }
 
-          const home = await caches.match('./index.html');
-          if (home) return home;
+        return response;
+      } catch (error) {
+        const cached = await caches.match(request);
+        if (cached) return cached;
 
-          return new Response(
-            'Aplikasi offline. Periksa koneksi internet.',
-            {
-              status: 503,
-              headers: {
-                'Content-Type': 'text/plain; charset=utf-8'
-              }
+        return new Response(
+          'Aplikasi sedang offline. Periksa koneksi internet.',
+          {
+            status: 503,
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8'
             }
-          );
-        })
-    );
+          }
+        );
+      }
+    })());
 
     return;
   }
 
-  // Aset lain: gunakan cache jika tersedia.
-  event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
+  event.respondWith((async () => {
+    const cached = await caches.match(request);
+    if (cached) return cached;
 
-      return fetch(request).then(response => {
-        if (response && response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE)
-            .then(cache => cache.put(request, copy))
-            .catch(() => {});
-        }
-
-        return response;
-      });
-    })
-  );
+    return fetch(request);
+  })());
 });
 ```
