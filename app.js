@@ -67,7 +67,7 @@ function loadData() {
     const scriptLama = document.getElementById('apiJsonp');
     if (scriptLama) scriptLama.remove();
   }
-
+  {
   window[callback] = function(payload) {
     if (selesai) return;
     bersihkan();
