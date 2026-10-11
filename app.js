@@ -38,6 +38,7 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 ```javascript
+```javascript
 function loadData(options = {}) {
   const requestId = ++loadRequestId;
 
@@ -49,11 +50,11 @@ function loadData(options = {}) {
 
   if (!options.automatic || transactions.length === 0) {
     $('transactionList').innerHTML =
-      '<div class="empty">Memuat data dari Google Sheets…</div>';
+      '<div class="empty">Memuat data dari Google Sheets...</div>';
   }
 
-  const old = document.getElementById('apiJsonp');
-  if (old) old.remove();
+  const oldScript = document.getElementById('apiJsonp');
+  if (oldScript) oldScript.remove();
 
   const callback = 'receiveSheetData';
 
@@ -65,25 +66,25 @@ function loadData(options = {}) {
     if (!payload || payload.ok !== true ||
         !Array.isArray(payload.data)) {
       $('transactionList').innerHTML =
-        '<div class="empty">Data API tidak valid. Periksa respons Google Sheets.</div>';
+        '<div class="empty">Respons Google Sheets tidak valid.</div>';
       return;
     }
 
     transactions = payload.data;
 
-    if (
-      transactions.length &&
-      !transactions.some(t =>
-        normalizeDate(t.tanggal).slice(0, 7) === currentMonth()
-      )
-    ) {
-      const months = transactions
+    if (transactions.length > 0) {
+      const availableMonths = transactions
         .map(t => normalizeDate(t.tanggal).slice(0, 7))
-        .filter(m => /^\d{4}-\d{2}$/.test(m))
-        .sort();
+        .filter(m => /^\d{4}-\d{2}$/.test(m));
 
-      if (months.length) {
-        $('monthFilter').value = months[months.length - 1];
+      if (
+        availableMonths.length > 0 &&
+        !availableMonths.includes(currentMonth()) &&
+        $('monthFilter').value === currentMonth()
+      ) {
+        availableMonths.sort();
+        $('monthFilter').value =
+          availableMonths[availableMonths.length - 1];
       }
     }
 
@@ -92,9 +93,11 @@ function loadData(options = {}) {
 
   const script = document.createElement('script');
   script.id = 'apiJsonp';
+  script.async = true;
   script.src =
     API_URL +
-    '?action=api&callback=' + callback +
+    '?action=api&callback=' +
+    encodeURIComponent(callback) +
     '&t=' + Date.now();
 
   script.onerror = function() {
@@ -102,8 +105,10 @@ function loadData(options = {}) {
 
     delete window[callback];
 
-    $('transactionList').innerHTML =
-      '<div class="empty">Gagal memuat data. Periksa koneksi internet dan deployment Apps Script.</div>';
+    if (transactions.length === 0) {
+      $('transactionList').innerHTML =
+        '<div class="empty">Gagal mengambil data. Periksa koneksi internet dan izin Apps Script.</div>';
+    }
 
     if (autoLoadRetry < 3) {
       autoLoadRetry++;
