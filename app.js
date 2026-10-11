@@ -35,7 +35,6 @@ function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-```javascript
 function loadData() {
   const list = $('transactionList');
 
