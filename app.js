@@ -237,6 +237,7 @@ function closeCategorySettings() {
 // MEMUAT DATA GOOGLE SHEETS - JSONP
 // ============================================
 
+
 function loadData() {
   const list = $('transactionList');
 
@@ -251,16 +252,11 @@ function loadData() {
     return;
   }
 
-  // Setiap permintaan memiliki nomor agar respons lama
-  // tidak menimpa hasil permintaan terbaru.
   const requestNumber = ++apiRequestNumber;
 
-  // Batalkan permintaan JSONP yang sebelumnya.
+  // Hentikan permintaan sebelumnya.
   const oldScript = $('apiJsonp');
-
-  if (oldScript) {
-    oldScript.remove();
-  }
+  if (oldScript) oldScript.remove();
 
   if (window.kasApiTimeout) {
     clearTimeout(window.kasApiTimeout);
@@ -274,6 +270,7 @@ function loadData() {
   let selesai = false;
 
   function bersihkan() {
+    if (selesai) return;
     selesai = true;
 
     if (window.kasApiTimeout) {
@@ -281,11 +278,8 @@ function loadData() {
       window.kasApiTimeout = null;
     }
 
-    const scriptLama = $('apiJsonp');
-
-    if (scriptLama) {
-      scriptLama.remove();
-    }
+    const script = $('apiJsonp');
+    if (script) script.remove();
 
     if (window[callback] === callbackHandler) {
       try {
@@ -296,113 +290,83 @@ function loadData() {
     }
   }
 
-  function callbackHandler(payload) {
+  function callbackHandler(result) {
     if (selesai || requestNumber !== apiRequestNumber) return;
 
     bersihkan();
 
     if (
-      !payload ||
-      payload.ok !== true ||
-      !Array.isArray(payload.data)
+      !result ||
+      result.ok !== true ||
+      !Array.isArray(result.data)
     ) {
-      console.error('Respons API tidak valid:', payload);
+      console.error('Respons API tidak valid:', result);
 
-      list.innerHTML = `
-        <div class="empty">
-          Data dari Google Sheets tidak valid.
-          Periksa deployment Apps Script dan judul kolom spreadsheet.
-        </div>
-      `;
-
-      if (payload && payload.message) {
-        console.error('Pesan API:', payload.message);
-      }
-
+      list.innerHTML =
+        '<div class="empty">Data gagal dibaca dari Google Sheets. Tekan Muat Ulang.</div>';
       return;
     }
 
-    transactions = payload.data.map(item => ({
-      id: String(item.id ?? ''),
-      tanggal: String(item.tanggal ?? '').slice(0, 10),
-      jenis: String(item.jenis ?? '').trim(),
-      kategori: String(item.kategori ?? '').trim(),
-      keterangan: String(item.keterangan ?? ''),
-      jumlah: Number(item.jumlah) || 0
-    }));
+    try {
+      transactions = result.data.map(item => ({
+        id: String(item.id || ''),
+        tanggal: String(item.tanggal || ''),
+        jenis: String(item.jenis || ''),
+        kategori: String(item.kategori || ''),
+        keterangan: String(item.keterangan || ''),
+        jumlah: Number(item.jumlah) || 0
+      }));
 
-    console.log(
-      'Data Google Sheets berhasil diterima:',
-      transactions.length,
-      'transaksi'
-    );
+      console.log(
+        'Berhasil memuat',
+        transactions.length,
+        'transaksi dari Google Sheets.'
+      );
 
-    render();
+      render();
+    } catch (error) {
+      console.error('Gagal menampilkan data:', error);
+
+      list.innerHTML =
+        '<div class="empty">Data diterima, tetapi gagal ditampilkan.</div>';
+    }
   }
 
+  // Daftarkan callback sebelum memuat URL API.
   window[callback] = callbackHandler;
 
   const script = document.createElement('script');
   script.id = 'apiJsonp';
+  script.async = true;
 
-  script.onerror = function() {
+  script.onerror = function () {
     if (selesai || requestNumber !== apiRequestNumber) return;
 
     bersihkan();
+    console.error('Gagal menghubungi Google Apps Script.');
 
-    list.innerHTML = `
-      <div class="empty">
-        Gagal menghubungi Google Sheets.
-        Periksa koneksi internet, izin Web App, dan deployment Apps Script.
-      </div>
-    `;
-
-    console.error('Gagal memuat script JSONP dari Google Apps Script.');
+    list.innerHTML =
+      '<div class="empty">Gagal mengambil data. Periksa koneksi internet, lalu tekan Muat Ulang.</div>';
   };
 
-  // Jika script selesai dimuat tetapi callback tidak dijalankan,
-  // kemungkinan deployment tidak mengembalikan format JSONP.
-  script.onload = function() {
+  window.kasApiTimeout = setTimeout(function () {
     if (selesai || requestNumber !== apiRequestNumber) return;
 
     bersihkan();
+    console.error('Permintaan API melewati batas waktu.');
 
-    list.innerHTML = `
-      <div class="empty">
-        API merespons tetapi callback JSONP tidak dijalankan.
-        Periksa apakah deployment Apps Script sudah menggunakan kode terbaru.
-      </div>
-    `;
-
-    console.error(
-      'Respons dimuat tanpa callback JSONP. Periksa parameter callback di Code.gs.'
-    );
-  };
+    list.innerHTML =
+      '<div class="empty">Server terlalu lama merespons. Periksa koneksi lalu tekan Muat Ulang.</div>';
+  }, 30000);
 
   script.src =
     API_URL +
-    '?action=api&callback=' +
+    '?callback=' +
     encodeURIComponent(callback) +
     '&t=' +
     Date.now();
 
-  document.body.appendChild(script);
-
-  // Timeout 30 detik untuk koneksi ponsel yang lambat.
-  window.kasApiTimeout = setTimeout(function() {
-    if (selesai || requestNumber !== apiRequestNumber) return;
-
-    bersihkan();
-
-    list.innerHTML = `
-      <div class="empty">
-        Permintaan data melewati batas waktu.
-        Periksa koneksi internet lalu tekan tombol Muat Ulang.
-      </div>
-    `;
-
-    console.error('Permintaan API melewati batas waktu 30 detik.');
-  }, 30000);
+  document.head.appendChild(script);
 }
 
 // ============================================
