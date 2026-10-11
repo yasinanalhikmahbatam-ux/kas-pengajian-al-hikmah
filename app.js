@@ -448,12 +448,12 @@ function render() {
   }
 
   if ($('pemasukan')) {
-    $('pemasukan').textContent = rupiah(masuk);
-  }
+  $('pemasukan').textContent = rupiah(totalMasuk);
+}
 
-  if ($('pengeluaran')) {
-    $('pengeluaran').textContent = rupiah(keluar);
-  }
+if ($('pengeluaran')) {
+  $('pengeluaran').textContent = rupiah(totalKeluar);
+}
 
   if ($('jumlahTransaksi')) {
     $('jumlahTransaksi').textContent =
