@@ -1,5 +1,5 @@
 // Ganti dengan URL Web App Apps Script Anda yang berakhiran /exec.
-const API_URL = 'PASTE_URL_WEB_APP_APPS_SCRIPT_DI_SINI';
+const API_URL = https://script.google.com/macros/s/AKfycbyJaQJus17QR3NEcshSfZbeQD8bdlAYGmN0ve0wN6vpormHesQLNouTwWsnn8qBnfpyVA/exec;
 const DEFAULT_CATEGORIES = {
   Pemasukan: ['Iuran jamaah','Donasi','Infak','Sedekah','Sumbangan','Lainnya'],
   Pengeluaran: ['Konsumsi','Transportasi','Perlengkapan','Kegiatan pengajian','Listrik/Air','Santunan','Lainnya']
