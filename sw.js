@@ -1,5 +1,9 @@
+// ============================================
+// SERVICE WORKER - KAS PENGAJIAN AL HIKMAH
+// Versi cache: v8
+// ============================================
 
-const CACHE = 'kas-pengajian-v7';
+const CACHE = 'kas-pengajian-v8';
 
 const ASSETS = [
   './',
@@ -11,25 +15,42 @@ const ASSETS = [
   './logo-al-hikmah.png'
 ];
 
+// ============================================
+// INSTALL
+// ============================================
+
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
 
-    // Cache file secara terpisah supaya satu aset yang hilang
-    // tidak menggagalkan penyimpanan seluruh aplikasi.
     await Promise.all(
       ASSETS.map(async asset => {
         try {
-          await cache.add(asset);
+          const response = await fetch(asset, {
+            cache: 'no-store'
+          });
+
+          if (response.ok) {
+            await cache.put(asset, response);
+          }
         } catch (error) {
-          console.warn('Aset belum berhasil dicache:', asset);
+          console.warn(
+            'Gagal mengambil aset:',
+            asset,
+            error
+          );
         }
       })
     );
 
+    // Aktifkan versi terbaru tanpa menunggu semua tab ditutup.
     await self.skipWaiting();
   })());
 });
+
+// ============================================
+// ACTIVATE
+// ============================================
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
@@ -38,31 +59,54 @@ self.addEventListener('activate', event => {
     await Promise.all(
       keys
         .filter(key =>
-          key.startsWith('kas-pengajian-') && key !== CACHE
+          key.startsWith('kas-pengajian-') &&
+          key !== CACHE
         )
         .map(key => caches.delete(key))
     );
 
     await self.clients.claim();
+
+    console.log(
+      'Service Worker aktif:',
+      CACHE
+    );
   })());
 });
 
+// ============================================
+// FETCH
+// File aplikasi: network-first.
+// Aset pendukung: cache-first.
+// Google Sheets API tidak dicegat.
+// ============================================
+
 self.addEventListener('fetch', event => {
   const request = event.request;
-  const url = new URL(request.url);
 
-  if (request.method !== 'GET' ||
-      url.origin !== self.location.origin) {
+  if (request.method !== 'GET') {
     return;
   }
 
-  const appFile =
-    /\/(index\.html|app\.js|style\.css|sw\.js)$/.test(url.pathname) ||
-    url.pathname.endsWith('/');
+  const url = new URL(request.url);
 
-  if (appFile) {
+  // Jangan mencegat permintaan lintas domain,
+  // termasuk Google Apps Script.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Abaikan permintaan yang bukan halaman biasa.
+  if (
+    request.destination === 'document' ||
+    /\/(index\.html|app\.js|style\.css|sw\.js)$/.test(
+      url.pathname
+    ) ||
+    url.pathname.endsWith('/')
+  ) {
     event.respondWith((async () => {
       try {
+        // Ambil versi terbaru dari hosting.
         const response = await fetch(request, {
           cache: 'no-store'
         });
@@ -74,11 +118,15 @@ self.addEventListener('fetch', event => {
 
         return response;
       } catch (error) {
+        // Jika offline, gunakan versi cache.
         const cached = await caches.match(request);
-        if (cached) return cached;
+
+        if (cached) {
+          return cached;
+        }
 
         return new Response(
-          'Aplikasi sedang offline. Periksa koneksi internet.',
+          'Aplikasi offline. Hubungkan HP ke internet, lalu buka kembali aplikasi.',
           {
             status: 503,
             headers: {
@@ -92,9 +140,13 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Cache-first untuk aset pendukung seperti ikon.
   event.respondWith((async () => {
     const cached = await caches.match(request);
-    if (cached) return cached;
+
+    if (cached) {
+      return cached;
+    }
 
     return fetch(request);
   })());
