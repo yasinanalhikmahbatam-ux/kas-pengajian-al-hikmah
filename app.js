@@ -9,6 +9,8 @@ let CATEGORIES=readCategories();
 const $ = id => document.getElementById(id);
 let transactions = [];
 let installPrompt = null;
+let loadRequestId = 0;
+let autoLoadRetry = 0;
 
 function localDateString(d = new Date()) {
   const offset = d.getTimezoneOffset();
@@ -35,20 +37,30 @@ function amountNumber(v){return Number(String(v||'').replace(/\./g,'').replace(/
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function loadData() {
+function loadData(options = {}) {
+  const requestId = ++loadRequestId;
   if (!apiReady()) {
     $('transactionList').innerHTML = '<div class="empty">Backend belum diatur.<br>Tempel URL Web App Apps Script di file <b>app.js</b>, lalu unggah ulang aplikasi.</div>';
     return;
   }
-  $('transactionList').innerHTML = '<div class="empty">Memuat data dari Google Sheets…</div>';
+  if (!options.automatic || transactions.length === 0) {
+    $('transactionList').innerHTML = '<div class="empty">Memuat data dari Google Sheets…</div>';
+  }
   const old = document.getElementById('apiJsonp'); if (old) old.remove();
   const callback = 'receiveSheetData';
   window[callback] = payload => {
     delete window[callback];
+    if (requestId !== loadRequestId) return;
+    autoLoadRetry = 0;
     if (!payload || !payload.ok || !Array.isArray(payload.data)) {
       $('transactionList').innerHTML = '<div class="empty">Data tidak dapat dibaca. Periksa URL dan izin deployment Apps Script.</div>'; return;
     }
     transactions = payload.data;
+    // Jika bulan berjalan kosong tetapi ada data lama, tampilkan bulan transaksi terbaru.
+    if (transactions.length && !transactions.some(t => normalizeDate(t.tanggal).slice(0,7) === currentMonth())) {
+      const latestMonth = transactions.map(t => normalizeDate(t.tanggal).slice(0,7)).filter(m => /^\d{4}-\d{2}$/.test(m)).sort().pop();
+      if (latestMonth) $('monthFilter').value = latestMonth;
+    }
     render();
   };
   const script = document.createElement('script');
@@ -56,15 +68,27 @@ function loadData() {
   script.src = API_URL + '?action=api&callback=' + callback + '&t=' + Date.now();
   script.onerror = () => {
     delete window[callback];
-    $('transactionList').innerHTML = '<div class="empty">Gagal terhubung. Periksa koneksi internet dan URL Apps Script.</div>';
+    if (requestId !== loadRequestId) return;
+    if (transactions.length === 0) {
+      $('transactionList').innerHTML = '<div class="empty">Gagal terhubung. Mencoba memuat ulang otomatis…</div>';
+    }
+    if (autoLoadRetry < 3) { autoLoadRetry++; setTimeout(() => loadData({ automatic: true }), 1800 * autoLoadRetry); }
   };
   document.body.appendChild(script);
+}
+function normalizeDate(value) {
+  const s = String(value ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : localDateString(d);
 }
 function render() {
   const month = $('monthFilter').value || currentMonth();
   const type = $('typeFilter').value;
   const query = $('searchInput').value.trim().toLowerCase();
-  const monthRows = transactions.filter(t => String(t.tanggal).slice(0,7) === month);
+  const monthRows = transactions.filter(t => normalizeDate(t.tanggal).slice(0,7) === month);
   const totalMasuk = transactions.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
   const totalKeluar = transactions.filter(t => t.jenis === 'Pengeluaran').reduce((s,t)=>s+Number(t.jumlah||0),0);
   const masuk = monthRows.filter(t => t.jenis === 'Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
@@ -113,7 +137,9 @@ $('transactionForm').addEventListener('submit', e => {
     btn.disabled = false; btn.textContent = 'Simpan transaksi';
     $('jumlah').value = ''; $('keterangan').value = '';
     showToast('Permintaan dikirim. Memperbarui data…');
-    setTimeout(loadData, 1600);
+    autoLoadRetry = 0;
+    setTimeout(() => loadData({ automatic: true }), 1200);
+    setTimeout(() => loadData({ automatic: true }), 2800);
   }, 700);
 });
 $('transactionList').addEventListener('click', e => {
@@ -124,14 +150,23 @@ $('transactionList').addEventListener('click', e => {
   if (!apiReady()) return;
   btn.disabled = true; submitPost({action:'delete',id:item.id});
   showToast('Permintaan hapus dikirim…');
-  setTimeout(loadData, 1300);
+  autoLoadRetry = 0;
+  setTimeout(() => loadData({ automatic: true }), 1200);
+  setTimeout(() => loadData({ automatic: true }), 2600);
 });
 document.querySelectorAll('input[name="jenis"]').forEach(el => el.addEventListener('change', setCategories));
 ['monthFilter','typeFilter','searchInput'].forEach(id => $(id).addEventListener(id==='searchInput'?'input':'change', render));
 $('refreshBtn').addEventListener('click', loadData);
+// Sinkronisasi otomatis saat aplikasi dibuka kembali atau tab aktif kembali.
+window.addEventListener('pageshow', () => setTimeout(() => loadData({ automatic: true }), 250));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadData({ automatic: true }); });
+// Sinkronkan data berkala saat aplikasi tetap terbuka, tanpa perlu refresh manual.
+window.setInterval(() => {
+  if (document.visibilityState === 'visible') loadData({ automatic: true });
+}, 30000);
 $('exportBtn').addEventListener('click', () => {
   const month = $('monthFilter').value || currentMonth();
-  const rows = transactions.filter(t => String(t.tanggal).slice(0,7) === month);
+  const rows = transactions.filter(t => normalizeDate(t.tanggal).slice(0,7) === month);
   if (!rows.length) { showToast('Tidak ada transaksi untuk diekspor.'); return; }
   const quote = v => `"${String(v??'').replace(/"/g,'""')}"`;
   const csv = '\ufeff' + [['Tanggal','Jenis','Kategori','Keterangan','Jumlah'], ...rows.map(t=>[t.tanggal,t.jenis,t.kategori,t.keterangan,t.jumlah])]
@@ -175,7 +210,7 @@ $('transactionForm').addEventListener('click', e => {
 });
 $('printBtn').addEventListener('click', () => {
   const month = $('monthFilter').value || currentMonth();
-  const rows = transactions.filter(t => String(t.tanggal).slice(0,7) === month &&
+  const rows = transactions.filter(t => normalizeDate(t.tanggal).slice(0,7) === month &&
     (!($('typeFilter').value) || t.jenis === $('typeFilter').value) &&
     `${t.kategori} ${t.keterangan} ${t.tanggal}`.toLowerCase().includes($('searchInput').value.trim().toLowerCase()));
   const masuk = rows.filter(t=>t.jenis==='Pemasukan').reduce((s,t)=>s+Number(t.jumlah||0),0);
@@ -184,12 +219,12 @@ $('printBtn').addEventListener('click', () => {
   if (!w) { showToast('Izinkan pop-up untuk mencetak laporan.'); return; }
   const safe = v => String(v ?? '').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   w.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Laporan Kas Pengajian ${safe(month)}</title>
-  <style>body{font-family:Arial,sans-serif;color:#222;padding:24px}h1,h2,p{text-align:center;margin:5px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border:1px solid #999;padding:8px;text-align:left;font-size:12px}th{background:#eaf3ed}.totals{display:flex;gap:28px;margin-top:20px;font-weight:bold}.date{text-align:right;font-size:12px;margin-top:18px}@media print{button{display:none}}</style></head><body>
+  <style>body{font-family:Arial,sans-serif;color:#222;padding:24px}h1,h2,p{text-align:center;margin:5px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border:1px solid #999;padding:8px;text-align:left;font-size:12px}th{background:#eaf3ed}.totals{display:flex;gap:28px;margin-top:20px;font-weight:bold;flex-wrap:wrap}.date{text-align:right;font-size:12px;margin-top:18px}.signature{display:flex;justify-content:flex-end;margin-top:55px;page-break-inside:avoid}.signature-box{width:240px;text-align:center;line-height:1.7}.signature-space{height:70px}.signature-name{border-bottom:1px solid #222;display:inline-block;min-width:190px;margin-top:4px}@media print{button{display:none}}</style></head><body>
   <h1>Majelis Yasinan “AL HIKMAH”</h1><h2>Laporan Kas Pengajian</h2><p>Periode ${safe(month)}</p>
   <div class="totals"><span>Total pemasukan: ${safe(rupiah(masuk))}</span><span>Total pengeluaran: ${safe(rupiah(keluar))}</span><span>Saldo periode: ${safe(rupiah(masuk-keluar))}</span></div>
   <table><thead><tr><th>No.</th><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Keterangan</th><th>Jumlah</th></tr></thead><tbody>
   ${rows.map((t,i)=>`<tr><td>${i+1}</td><td>${safe(t.tanggal)}</td><td>${safe(t.jenis)}</td><td>${safe(t.kategori)}</td><td>${safe(t.keterangan)}</td><td>${safe(rupiah(t.jumlah))}</td></tr>`).join('')}
-  </tbody></table><p class="date">Dicetak: ${safe(new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short'}).format(new Date()))}</p>
+  </tbody></table><p class="date">Dicetak: ${safe(new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short'}).format(new Date()))}</p><div class="signature"><div class="signature-box">Mengetahui,<br><strong>Bendahara</strong><div class="signature-space"></div><div class="signature-name">( ................................ )</div></div></div>
   <script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 });
