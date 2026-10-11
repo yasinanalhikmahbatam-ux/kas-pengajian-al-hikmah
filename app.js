@@ -79,7 +79,9 @@ function normalizeDate(value) {
   match = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
 
   if (match) {
-    return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+    return match[3] + '-' +
+  match[2].padStart(2, '0') + '-' +
+  match[1].padStart(2, '0');
   }
 
   // Format tanggal dari Google Sheets berupa tanggal lengkap
